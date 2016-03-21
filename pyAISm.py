@@ -57,7 +57,9 @@ def decod_name(data):
     # decode 6bits strings
     name = ''
     for k in range(len(data)/6):
-        name += decod_6bits_ascii(data[6*k:6*(k+1)])
+        letter = decod_6bits_ascii(data[6*k:6*(k+1)])
+        if letter != '@':
+            name += letter
     return name
 
 def decod_data(data):
@@ -66,6 +68,29 @@ def decod_data(data):
     # returns {'type':18, etc...}
     # if needed, see http://catb.org/gpsd/AIVDM.html
     type_nb = int(data[0:6],2)
+
+    def decod_5(data):
+        ais_data                 = {'type':int(data[0:6],2)}
+        ais_data['repeat']       = int(data[6:8],2)
+        ais_data['mmsi']         = int(data[8:38],2)
+        ais_data['ais_version']  = int(data[38:40],2)
+        ais_data['imo']          = int(data[40:70],2)
+        ais_data['callsign']     = decod_name(data[70:112])
+        ais_data['shipname']     = decod_name(data[112:232])
+        ais_data['shiptype']     = int(data[232:240],2)
+        ais_data['to_bow']       = int(data[240:249],2)
+        ais_data['to_stern']     = int(data[249:258],2)
+        ais_data['to_port']      = int(data[258:264],2)
+        ais_data['to_starboard'] = int(data[264:270],2)
+        ais_data['epfd']         = int(data[270:274],2)
+        ais_data['month']        = int(data[274:278],2)
+        ais_data['day']          = int(data[278:283],2)
+        ais_data['hour']         = int(data[283:288],2)
+        ais_data['minute']       = int(data[288:294],2)
+        ais_data['draught']      = int(data[294:302],2)
+        ais_data['dte']          = data[302]
+        return ais_data
+
     def decod_18(data):
         ais_data             = {'type':int(data[0:6],2)}
         ais_data['repeat']   = int(data[6:8],2)
@@ -103,13 +128,14 @@ def decod_data(data):
         ais_data['to_stern']     = int(data[280:288],2)
         ais_data['to_port']      = int(data[289:295],2)
         ais_data['to_starboard'] = int(data[295:301],2)
-        ais_data['epfd']         = data[301:305]
+        ais_data['epfd']         = int(data[301:305],2)
         ais_data['raim']         = data[305]
         ais_data['dte']          = data[306]
         ais_data['assigned']     = data[307]
         return ais_data
 
     decod_type = {
+                    5  : decod_5,
                     18 : decod_18,
                     19 : decod_19,
                  }
@@ -126,6 +152,20 @@ def decod_ais(msg):
     # try with '!ais_data,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
     # doc : http://catb.org/gpsd/AIVDM.html
     payload = get_payload(msg)
+    nmsg = msg.split(',')
+    if nmsg[1]!= 1:
+        if nmsg[2]!=nmsg[1]:
+            with open('.tmp.txt','a') as tmp_payload:
+                tmp_payload.write(payload+'\n')
+            return {'none':'Multi sentences AIS '}
+        else:
+            with open('.tmp.txt','r') as tmp_payload:
+                payload = ''
+                for line in tmp_payload:
+                    payload += line.strip('\n')
+            payload += get_payload(msg)
+            with open('.tmp.txt','w') as tmp_payload:
+                tmp_payload.write('')
     data = decod_payload(payload)
     ais_data = decod_data(data)
     return ais_data
@@ -196,6 +236,19 @@ def format_ais(ais_base):
     def format_dte(dte):
         return 'Data terminal ready' if dte == '0' else 'Data terminal N/A'
 
+    def format_epfd(epfd):
+        epfd_types = {  0 : 'Undefined',
+                        1 : 'GPS',
+                        2 : 'GLONASS',
+                        3 : 'GPS/GLONASS',
+                        4 : 'Loran-C',
+                        5 : 'Cayka',
+                        6 : 'Integrated',
+                        7 : 'Surveyed',
+                        8 : 'Galileo'}
+        return epfd_types[epfd]
+    
+
     format_list = {
                   'lat':format_lat,
                   'lon':format_lon,
@@ -208,7 +261,8 @@ def format_ais(ais_base):
                   'band':format_band,
                   'msg22':format_msg22,
                   'assigned':format_assigned,
-                  'dte':format_dte
+                  'dte':format_dte,
+                  'epfd':format_epfd
                   }
 
     for key in ais_format.keys():
@@ -216,3 +270,13 @@ def format_ais(ais_base):
             ais_format[key] = format_list[key](ais_format[key])
 
     return ais_format
+
+msg = []
+msg.append('!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E')
+msg.append('!AIVDM,2,2,3,B,1@0000000000000,2*55')
+
+for msgs in msg:
+    ais = decod_ais(msgs)
+    print ais
+    ais2 = format_ais(ais)
+    print ais2
