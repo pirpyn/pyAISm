@@ -24,15 +24,17 @@ def sign_int(s_bytes):
     else:
         return int(temp,2)
 
+##############################################################################
+
 def get_payload(msg):
-    msg = msg.split(',')
-    return msg[5]
+    return msg.split(',')[5]
 
 def get_sentense_number(msg):
     return msg.split(',')[1]
 
 def get_sentense_count(msg):
     return msg.split(',')[2]
+
 ##############################################################################
 
 def decod_payload(payload):
@@ -89,7 +91,7 @@ def decod_data(data):
         ais_data['day']          = int(data[278:283],2)
         ais_data['hour']         = int(data[283:288],2)
         ais_data['minute']       = int(data[288:294],2)
-        ais_data['draught']      = int(data[294:302],2)
+        ais_data['draught']      = int(data[294:302],2)*10
         ais_data['dte']          = data[302]
         return ais_data
 
@@ -101,7 +103,7 @@ def decod_data(data):
         ais_data['accuracy'] = data[56]
         ais_data['lon']      = sign_int(data[57:85])/600000.0
         ais_data['lat']      = sign_int(data[85:112])/600000.0
-        ais_data['course']   = int(data[112:124],2)
+        ais_data['course']   = int(data[112:124],2)*0.1
         ais_data['heading']  = int(data[124:133],2)
         ais_data['second']   = int(data[133:139],2)
         ais_data['regional'] = int(data[139:141],2)
@@ -121,7 +123,7 @@ def decod_data(data):
         ais_data['accuracy']     = data[56]
         ais_data['lon']          = sign_int(data[57:85])/600000.0
         ais_data['lat']          = sign_int(data[85:112])/600000.0
-        ais_data['course']       = int(data[112:124],2)
+        ais_data['course']       = int(data[112:124],2)*0.1
         ais_data['heading']      = int(data[124:133],2)
         ais_data['second']       = int(data[133:139],2)
         ais_data['regional']     = int(data[139:143],2)
@@ -158,14 +160,14 @@ def decod_ais(msg):
     s_size  = get_sentense_number(msg)
     s_count = get_sentense_count(msg)
 
-    if s_size != 1:
-        global globPayload #usefull only if multi-line sentenses.
-        if s_size != s_count:
+    if s_size != 1: #usefull only if multi-line sentenses.
+        global globPayload 
+        if s_size != s_count: #if this isn't the last messages
             globPayload = payload + globPayload
             return {'none':'Multi sentences AIS ','AIS':msg}
         else:
             payload = globPayload + payload
-            globPayload = ''
+            globPayload = '' #reset the global var for future messages
 
     data = decod_payload(payload)
     ais_data = decod_data(data)
@@ -175,14 +177,14 @@ def decod_ais(msg):
 
 def format_coord(coord_dec,Dir=''):
     # get position in decimal base and return a string with position in arc-base
-    # takes 43.29492333333334
+    # takes (43.29492333333334,'N')
     # returns 43°17'41.7"N
     tmp = str(coord_dec).split('.')
     deg = float(tmp[0])
     mnt = float('0.'+tmp[1])*60
     tmp = str(mnt).split('.')
     sec = float('0.'+tmp[1])*60
-    return str(int(deg))+'°'+str(int(mnt))+"'"+str(sec)[:6]+'"'+Dir
+    return str(int(deg))+'°'+str(int(mnt))+"'"+str(sec)[:4]+'"'+Dir
 
 def format_ais(ais_base):
     # format the ais_data database to user-friendly display
@@ -195,10 +197,22 @@ def format_ais(ais_base):
         return (format_coord(lon,'E') if lon > 0 else format_coord(lon,'W'))
 
     def format_course(course):
-        return 'N/A' if course == 3600 else str(course*0.1)+'° relative to North'
+        return 'N/A' if course == 3600 else str(course)+'° relative to North'
 
     def format_heading(heading):
         return 'N/A' if heading == 511 else str(heading)+'°'
+
+    def format_month(month):
+        return 'N/A' if month == 0 else month
+
+    def format_day(day):
+        return 'N/A' if day == 0 else day
+
+    def format_hour(hour):
+        return 'N/A' if hour == 24 else hour
+
+    def format_minute(minute):
+        return 'N/A' if minute == 60 else minute
 
     def format_second(second):
         if second == 60:
@@ -369,7 +383,11 @@ def format_ais(ais_base):
                   'assigned' : format_assigned,
                   'dte'      : format_dte,
                   'epfd'     : format_epfd,
-                  'shiptype' : format_shiptype
+                  'shiptype' : format_shiptype,
+                  'month'    : format_month,
+                  'day'      : format_day,
+                  'hour'     : format_hour,
+                  'minute'   : format_minute
                   }
 
     for key in ais_format.keys():
