@@ -378,12 +378,4 @@ def format_ais(ais_base):
 
     return ais_format
 
-msg = []
-msg.append('!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E')
-msg.append('!AIVDM,2,2,3,B,1@0000000000000,2*55')
-msg.append('!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A')
-msg.append('!AIVDM,1,1,,B,177KQJ5000G?tO`K>RA1wUbN0TKH,0*5C')
-for msgs in msg:
-    ais = decod_ais(msgs)
-    ais2 = format_ais(ais)
-    print ais2
+##############################################################################
