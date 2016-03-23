@@ -12,7 +12,8 @@
 
 def sign_int(s_bytes):
     # converts signed pack of bytes (as a string) to signed int
-    # s_bytes = '1001001010010010...' up to 6*82 bits
+    # @param s_bytes (string) : '1001001010010010...'
+    # @return (int) : signed integer 
     temp = s_bytes
     if s_bytes[0]=='1':
         l = temp.rfind('1') #find last one
@@ -24,22 +25,53 @@ def sign_int(s_bytes):
     else:
         return int(temp,2)
 
+def compute_checksum(msg):
+    # compute the checksum of an AIS sentense by XOR every char
+    # then confront it to the checksum validator
+    # @param (string) msg : one AIS sentense '!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
+    # @return (string) : string representation of hexadecimal sum of XORing every char bitwise
+    end = msg.rfind('*') # we're gonna read from after '?'' to before '*
+    start = 0
+    if msg[0] in ('$','!'): start=1 # reading after '!' if it exists
+    chcksum = 0
+    for c in msg[start:end]: # for every char in the ais sentenses (comma included)
+        chcksum = chcksum ^ ord(c) # compare them with the x-or operator '^'
+    sumHex = "%x" % chcksum # makes it hexadecimal
+    return sumHex.zfill(2).upper()
+
 ##############################################################################
 
 def get_payload(msg):
+    # read the ais sentense and return the payload
+    # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
+    # @return (string) : the payload '55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53'
     return msg.split(',')[5]
 
 def get_sentense_number(msg):
+    # read the ais sentense and return the number of sentenses the payload is splitted in
+    # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
+    # @return (string) number of sentenses: '2'
     return msg.split(',')[1]
 
 def get_sentense_count(msg):
+    # read the ais sentense and return the number of the sentense
+    # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
+    # @return (string) the number of the current: '1'
     return msg.split(',')[2]
+
+def get_checksum(msg):
+    # read the ais sentense and return the number of the sentense
+    # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
+    # @return (string) checksum validator: '3E'
+    return msg.split('*')[-1]
 
 ##############################################################################
 
 def decod_payload(payload):
-    # convert the payload from ASCII char to a data pack of bytes to be decoded
-    # payload = '177KQJ5000G?tO`K>RA1wUbN0TKH' up to 82 chars
+    # convert the payload from ASCII char to their 6-bits representation for every char
+    # doc : http://catb.org/gpsd/AIVDM.html#_aivdm_aivdo_payload_armoring
+    # @param (string) payload : '177KQ' up to 82 chars
+    # @return (string) data :  '000001000111000111011011100001'
     data = ''
     for i in range(len(payload)):
         char = ord(payload[i])-48
@@ -52,13 +84,19 @@ def decod_payload(payload):
 
 def decod_6bits_ascii(bits):
     # decode 6bits into an ascii char, with respect to the 6bits ascii table
+    # doc : http://catb.org/gpsd/AIVDM.html#_ais_payload_data_types
+    # @param (string) bits : '101010'
+    # @return (char) a ascii charater : '*'
     letter = int(bits,2)
     if letter < 32:
         letter+=64
     return chr(letter)
 
 def decod_str(data):
-    # decode 6bits strings
+    # decode a string of bits to an ascii one with respect to the 6bits ascii table
+    # doc : http://catb.org/gpsd/AIVDM.html#_ais_payload_data_types
+    # @param (string) data : a string of bits  '000001000001000001'
+    # @return (string) a string of bits : 'AAA'
     name = ''
     for k in range(len(data)/6):
         letter = decod_6bits_ascii(data[6*k:6*(k+1)])
@@ -68,9 +106,9 @@ def decod_str(data):
 
 def decod_data(data):
     # decode AIS payload and return a dictionnary with key:value
-    # input : '11110011000101....' by pack of 6 bits
-    # returns {'type':18, etc...}
-    # if needed, see http://catb.org/gpsd/AIVDM.html
+    # doc : http://catb.org/gpsd/AIVDM.html
+    # @param (string) data : '11110011000101....' by pack of 6 bits
+    # @return (dict) ais_data : {'type':18, etc...}
     type_nb = int(data[0:6],2)
 
     def decod_5(data):
@@ -138,36 +176,44 @@ def decod_data(data):
         ais_data['assigned']     = data[307]
         return ais_data
 
-    decod_type = {
+    decod_type = {                              # list of the ais message type we can decode
                     5  : decod_5,
                     18 : decod_18,
                     19 : decod_19,
                  }
     try:
-        ais_data = decod_type[type_nb](data)
-    except:
+        ais_data = decod_type[type_nb](data)    # try to decode the sentense without assumption of its type
+    except:                                     # if it fails, like a type 16 message, execute following code
         print "ERROR : Cannot decode message type "+str(type_nb)
         ais_data = {'type':type_nb}
-        #raise
+        #raise                                  # raise will raise the last error (WrongKey) and crash the script
     return ais_data
 
 globPayload = '' # in case of multi-lines sentenses, declare global var to store previous payload
 def decod_ais(msg):
-    # main function to decode somes ais_data/AIVDM messages:
-    # try with '!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
-    # doc : http://catb.org/gpsd/AIVDM.html
+    # decode AIS messages, especially AIVDM/AIVDO sentenses:
+    # if the message is splitted on several lines, return a dict with 'none' key as 'empty' value
+    # if the checksum doesn't correspond, raise and error
+    # @param (string) msg : one AIS sentense  '!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
+    # @return (dict) ais_data : {'type':18, etc...}
     payload = get_payload(msg)
     s_size  = get_sentense_number(msg)
     s_count = get_sentense_count(msg)
 
-    if s_size != 1: #usefull only if multi-line sentenses.
+    try:
+        assert compute_checksum(msg) == get_checksum(msg)
+    except:
+        print 'ERROR : Checksum not valid ('+str(checkAis(msg))+'!='+str(get_checksum(msg))+'), message is broken/corrupted'
+        raise
+
+    if s_size != '1' :                          # usefull only if multi-line sentenses.
         global globPayload 
-        if s_size != s_count: #if this isn't the last messages
-            globPayload = payload + globPayload
-            return {'none':'Multi sentences AIS ','AIS':msg}
+        if s_size != s_count:                   # if this isn't the last messages
+            globPayload = payload + globPayload # append the current payload to the main payload
+            return {'none':'empty'}
         else:
-            payload = globPayload + payload
-            globPayload = '' #reset the global var for future messages
+            payload = globPayload + payload     # append the last payload
+            globPayload = ''                    # reset the global var for future messages
 
     data = decod_payload(payload)
     ais_data = decod_data(data)
@@ -177,8 +223,9 @@ def decod_ais(msg):
 
 def format_coord(coord_dec,Dir=''):
     # get position in decimal base and return a string with position in arc-base
-    # takes (43.29492333333334,'N')
-    # returns 43°17'41.7"N
+    # @param (int) coord_dec : degree decimal coordinate 43.29492333333334
+    # @param (char) Dir : char to specify the direction like 'N' for North. By default, nothing.
+    # @return (string) : a degree,minute,second coordinate + direction  43°17'41.7"N
     tmp = str(coord_dec).split('.')
     deg = float(tmp[0])
     mnt = float('0.'+tmp[1])*60
@@ -187,7 +234,9 @@ def format_coord(coord_dec,Dir=''):
     return str(int(deg))+'°'+str(int(mnt))+"'"+str(sec)[:4]+'"'+Dir
 
 def format_ais(ais_base):
-    # format the ais_data database to user-friendly display
+    # format the ais_data database to a more user-friendly display
+    # @param (dict) ais_base : the ais_data base to format 
+    # @return (dict) ais_format : a dictionnary with the same kay as ais_data but other value
     ais_format = ais_base.copy()
 
     def format_lat(lat):
@@ -198,6 +247,14 @@ def format_ais(ais_base):
 
     def format_course(course):
         return 'N/A' if course == 3600 else str(course)+'° relative to North'
+
+    def format_speed(speed):
+        if speed == 1023:
+            return 'N/A'
+        elif speed == 1022:
+            return ' > 102 knots'
+        else:
+            return str(speed*0.1) + ' knots'
 
     def format_heading(heading):
         return 'N/A' if heading == 511 else str(heading)+'°'
@@ -369,10 +426,11 @@ def format_ais(ais_base):
         ]
         return shiptype_list[shiptype]
 
-    format_list = {
+    format_list = {                                                #list of all the key that can be formatted 
                   'lat'      : format_lat,
                   'lon'      : format_lon,
                   'course'   : format_course,
+                  'speed'    : format_speed,
                   'heading'  : format_heading,
                   'second'   : format_second,
                   'cs'       : format_cs,
@@ -390,9 +448,9 @@ def format_ais(ais_base):
                   'minute'   : format_minute
                   }
 
-    for key in ais_format.keys():
-        if format_list.has_key(key):
-            ais_format[key] = format_list[key](ais_format[key])
+    for key in ais_base.keys():                                 #for every key we have
+        if format_list.has_key(key):                            #if we can format it
+            ais_format[key] = format_list[key](ais_format[key]) #format it
 
     return ais_format
 
