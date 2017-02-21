@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding: latin-1
 # A bunch of naive pythons functions to decode somes ais_data/AIVDM messages:
 # try with !AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A
