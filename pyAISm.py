@@ -204,7 +204,7 @@ def decod_ais(msg):
     try:
         assert compute_checksum(msg) == get_checksum(msg)
     except:
-        print 'ERROR : Checksum not valid ('+str(checkAis(msg))+'!='+str(get_checksum(msg))+'), message is broken/corrupted'
+        print 'ERROR : Checksum not valid ('+str(compute_checksum(msg))+'!='+str(get_checksum(msg))+'), message is broken/corrupted'
         raise
 
     if s_size != '1' :                          # usefull only if multi-line sentenses.
