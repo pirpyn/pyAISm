@@ -99,7 +99,7 @@ def decod_str(data):
     # @param (string) data : a string of bits  '000001000001000001'
     # @return (string) a string of bits : 'AAA'
     name = ''
-    for k in range(len(data)/6):
+    for k in range(len(data)//6):
         letter = decod_6bits_ascii(data[6*k:6*(k+1)])
         if letter != '@':
             name += letter
@@ -111,6 +111,25 @@ def decod_data(data):
     # @param (string) data : '11110011000101....' by pack of 6 bits
     # @return (dict) ais_data : {'type':18, etc...}
     type_nb = int(data[0:6],2)
+
+    def decod_1(data): # Message types 1,2,3
+        ais_data                 = {'type':int(data[0:6],2)}
+        ais_data['repeat']       = int(data[6:8],2)
+        ais_data['mmsi']         = int(data[8:38],2)
+        ais_data['status']       = int(data[38:42],2)
+        ais_data['turn']         = sign_int(data[42:50])
+        ais_data['speed']        = int(data[50:60], 2)
+        ais_data['accuracy']     = data[60]
+        ais_data['lon']          = sign_int(data[61:89]) / 600000.0
+        ais_data['lat']          = sign_int(data[89:116]) / 600000.0
+        ais_data['course']       = int(data[116:128],2) * 0.1
+        ais_data['heading']      = int(data[128:137],2)
+        ais_data['second']       = int(data[137:143],2)
+        ais_data['maneuver']     = int(data[143:145],2)
+        ais_data['raim']         = data[148]
+        ais_data['radio']        = int(data[149:168], 2)
+        return ais_data
+
 
     def decod_5(data):
         ais_data                 = {'type':int(data[0:6],2)}
@@ -130,7 +149,7 @@ def decod_data(data):
         ais_data['day']          = int(data[278:283],2)
         ais_data['hour']         = int(data[283:288],2)
         ais_data['minute']       = int(data[288:294],2)
-        ais_data['draught']      = int(data[294:302],2)*10
+        ais_data['draught']      = float(int(data[294:302],2)/10)
         ais_data['dte']          = data[302]
         return ais_data
 
@@ -155,7 +174,7 @@ def decod_data(data):
         ais_data['raim']     = data[147]
         ais_data['radio']    = int(data[148:168],2)
         return ais_data
-    
+
     def decod_19(data):
         ais_data                 = {'type':int(data[0:6],2)}
         ais_data['speed']        = int(data[46:56],2)
@@ -178,6 +197,9 @@ def decod_data(data):
         return ais_data
 
     decod_type = {                              # list of the ais message type we can decode
+                    1  : decod_1,
+                    2  : decod_1,
+                    3  : decod_1,
                     5  : decod_5,
                     18 : decod_18,
                     19 : decod_19,
@@ -185,7 +207,7 @@ def decod_data(data):
     try:
         ais_data = decod_type[type_nb](data)    # try to decode the sentense without assumption of its type
     except:                                     # if it fails, like a type 16 message, execute following code
-        print "ERROR : Cannot decode message type "+str(type_nb)
+        print("ERROR : Cannot decode message type "+str(type_nb))
         ais_data = {'type':type_nb}
         #raise                                  # raise will raise the last error (WrongKey) and crash the script
     return ais_data
@@ -194,8 +216,8 @@ globPayload = '' # in case of multi-lines sentenses, declare global var to store
 def decod_ais(msg):
     # decode AIS messages, especially AIVDM/AIVDO sentenses:
     # if the message is splitted on several lines, return a dict with 'none' key as 'empty' value
-    # if the checksum doesn't correspond, raise and error
-    # @param (string) msg : one AIS sentense  '!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
+    # if the checksum doesn't correspond, raise an error
+    # @param (string) msg : one AIS sentence  '!AIVDO,1,1,,,B00000000868rA6<H7KNswPUoP06,0*6A'
     # @return (dict) ais_data : {'type':18, etc...}
     payload = get_payload(msg)
     s_size  = get_sentense_number(msg)
@@ -204,11 +226,11 @@ def decod_ais(msg):
     try:
         assert compute_checksum(msg) == get_checksum(msg)
     except:
-        print 'ERROR : Checksum not valid ('+str(compute_checksum(msg))+'!='+str(get_checksum(msg))+'), message is broken/corrupted'
+        print('ERROR : Checksum not valid ('+str(compute_checksum(msg))+'!='+str(get_checksum(msg))+'), message is broken/corrupted')
         raise
 
-    if s_size != '1' :                          # usefull only if multi-line sentenses.
-        global globPayload 
+    if s_size != '1' :                          # usefull only if multi-line sentences.
+        global globPayload
         if s_size != s_count:                   # if this isn't the last messages
             globPayload = payload + globPayload # append the current payload to the main payload
             return {'none':'empty'}
@@ -228,11 +250,11 @@ def format_coord(coord_dec,Dir=''):
     # @param (char) Dir : char to specify the direction like 'N' for North. By default, nothing.
     # @return (string) : a degree,minute,second coordinate + direction  43째17'41.7"N
     tmp = str(coord_dec).split('.')
-    deg = float(tmp[0])
+    deg = abs(float(tmp[0]))
     mnt = float('0.'+tmp[1])*60
     tmp = str(mnt).split('.')
     sec = float('0.'+tmp[1])*60
-    return str(int(deg))+'째'+str(int(mnt))+"'"+str(sec)[:4]+'"'+Dir
+    return str(int(deg))+'�'+str(int(mnt))+"'"+str(sec)[:4]+'"'+Dir
 
 def format_ais(ais_base):
     # format the ais_data database to a more user-friendly display
@@ -243,22 +265,24 @@ def format_ais(ais_base):
     def format_lat(lat):
         return (format_coord(lat,'N') if lat > 0 else format_coord(lat,'S'))
 
-    def format_lon(lon):          
+    def format_lon(lon):
         return (format_coord(lon,'E') if lon > 0 else format_coord(lon,'W'))
 
     def format_course(course):
-        return 'N/A' if course == 3600 else str(course)+'째 relative to North'
+        return 'N/A' if course == 3600 else "{:3.1f}�".format(course).zfill(6) #with leading zeroes
 
     def format_speed(speed):
         if speed == 1023:
             return 'N/A'
         elif speed == 1022:
             return ' > 102 knots'
+        elif speed == 0:
+            return "0 knots"
         else:
-            return str(speed*0.1) + ' knots'
+            return "{0:.1f} knots".format(speed*0.1)
 
     def format_heading(heading):
-        return 'N/A' if heading == 511 else str(heading)+'째'
+        return 'N/A' if heading == 511 else "{:3.1f}�".format(heading).zfill(6) #with leading zeroes
 
     def format_month(month):
         return 'N/A' if month == 0 else month
@@ -293,7 +317,7 @@ def format_ais(ais_base):
     def format_dsc(dsc):
         if dsc == '1':
           return 'VHF voice radio with DSC capability'
-  
+
     def format_band(band):
         if band == '1':
             return 'Can use any frequency of the marine channel'
@@ -320,7 +344,7 @@ def format_ais(ais_base):
                         'Surveyed',
                         'Galileo' ]
         return epfd_types[epfd]
-    
+
 
     def format_shiptype(shiptype):
         shiptype_list = [
@@ -427,7 +451,39 @@ def format_ais(ais_base):
         ]
         return shiptype_list[shiptype]
 
-    format_list = {                                                #list of all the key that can be formatted 
+    def format_turn(rot):
+        if rot >= 1 and rot <= 126:
+            return (rot/4.733)**2 + ' Right'
+        if rot >= -126 and rot <= -1:
+            return (rot/4.733)**2 + ' Left'
+        if rot==127:
+            return '> 5deg/30sec Right (No TI available)'
+        if rot == -127:
+            return '> 5deg/30sec Left (No TI available)'
+        return 'N/A'
+
+    def format_status(status):
+        status_list = [
+            "Under way using engine",
+            "At anchor",
+            "Not under command",
+            "Restricted manoeuverability",
+            "Constrained by her draught",
+            "Moored",
+            "Aground",
+            "Engaged in Fishing",
+            "Under way sailing",
+            "Reserved for future amendment of Navigational Status for HSC", #TODO: Check if this is the future
+            "Reserved for future amendment of Navigational Status for WIG",#TODO: Check if this is the future
+            "Reserved for future use",
+            "Reserved for future use",
+            "Reserved for future use",
+            "AIS-SART is active",
+            "Not defined (default)",
+        ]
+        return status_list[status]
+
+    format_list = {                                                #list of all the key that can be formatted
                   'lat'      : format_lat,
                   'lon'      : format_lon,
                   'course'   : format_course,
@@ -446,11 +502,13 @@ def format_ais(ais_base):
                   'month'    : format_month,
                   'day'      : format_day,
                   'hour'     : format_hour,
-                  'minute'   : format_minute
+                  'minute'   : format_minute,
+                  'turn'     : format_turn,
+                  'status'   : format_status
                   }
 
-    for key in ais_base.keys():                                 #for every key we have
-        if format_list.has_key(key):                            #if we can format it
+    for key in list(ais_base.keys()):                                 #for every key we have
+        if key in format_list:                            #if we can format it
             ais_format[key] = format_list[key](ais_format[key]) #format it
 
     return ais_format
