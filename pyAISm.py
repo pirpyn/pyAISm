@@ -56,13 +56,13 @@ def get_payload(msg):
     # @return (string) : the payload '55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53'
     return msg.split(',')[5]
 
-def get_sentense_number(msg):
+def get_sentence_number(msg):
     # read the ais sentense and return the number of sentenses the payload is splitted in
     # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
     # @return (string) number of sentenses: '2'
     return msg.split(',')[1]
 
-def get_sentense_count(msg):
+def get_sentence_count(msg):
     # read the ais sentense and return the number of the sentense
     # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
     # @return (string) the number of the current: '1'
@@ -113,8 +113,13 @@ def decod_str(data):
             name += letter
     return name.rstrip()
 
+
+def is_auxiliary_craft(mmsi):
+    return mmsi//10000000 == 98
+
+
 def decod_data(data):
-    # decode AIS payload and return a dictionnary with key:value
+    # decode AIS payload and return a dictionary with key:value
     # doc : http://catb.org/gpsd/AIVDM.html
     # @param (string) data : '11110011000101....' by pack of 6 bits
     # @return (dict) ais_data : {'type':18, etc...}
@@ -204,6 +209,30 @@ def decod_data(data):
         ais_data['assigned']     = data[307]
         return ais_data
 
+
+    def decod_24(data):
+        ais_data                 = {'type':int(data[0:6],2)}
+        ais_data['repeat']       = int(data[6:8],2)
+        ais_data['mmsi']         = int(data[8:38],2)
+        ais_data['partno']       = int(data[38:40],2)
+        if not(ais_data['partno']):
+            ais_data['shipname']     = decod_str(data[40:160])
+        else:
+            ais_data['shiptype']     = int(data[40:48],2)
+            ais_data['vendorid']     = int(data[48:66],2)
+            ais_data['vendorname']   = decod_str(data[48:90]) #Older models. might be garbage
+            ais_data['model']        = int(data[66:70],2)
+            ais_data['serial']       = int(data[70:90],2)
+            ais_data['callsign']     = decod_str(data[90:132])
+            if not(is_auxiliary_craft(ais_data['mmsi'])):
+                ais_data['to_bow']       = int(data[132:141],2)
+                ais_data['to_stern']     = int(data[141:150],2)
+                ais_data['to_port']      = int(data[150:156],2)
+                ais_data['to_starboard'] = int(data[156:162],2)
+            else:
+                ais_data['mothership_mmsi'] = int(data[132:162],2)
+        return ais_data
+
     decod_type = {                              # list of the ais message type we can decode
                     1  : decod_1,
                     2  : decod_1,
@@ -211,6 +240,7 @@ def decod_data(data):
                     5  : decod_5,
                     18 : decod_18,
                     19 : decod_19,
+                    24 : decod_24
                  }
     try:
         ais_data = decod_type[type_nb](data)    # try to decode the sentense without assumption of its type
@@ -236,8 +266,8 @@ def decod_ais(msg):
     if not(message_type =='!AIVDM' or message_type == '!AIVDO'):
         raise UnrecognizedNMEAMessageError(message_type)
     payload = get_payload(msg)
-    s_size  = get_sentense_number(msg)
-    s_count = get_sentense_count(msg)
+    s_size  = get_sentence_number(msg)
+    s_count = get_sentence_count(msg)
 
 
     if (compute_checksum(msg) != get_checksum(msg)):
