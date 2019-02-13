@@ -1,13 +1,10 @@
-import urllib
-import pyAISm
-from urllib.request import urlopen
-import http.client
-
 import socket
+
+import pyAISm
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-s.connect(("ais.exploratorium.edu" , 80))
+s.connect(("ais.exploratorium.edu", 80))
 s.sendall("GET / HTTP/1.1\r\nHost: www.cnn.com\r\n\r\n".encode())
 while (1):
     msg = (s.recv(4096).decode('utf-8')).splitlines()
@@ -24,4 +21,3 @@ while (1):
         except Exception as e:
             print(e)
 s.close
-

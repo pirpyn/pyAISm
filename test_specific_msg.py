@@ -8,14 +8,15 @@ for aline in file:
         msg = aline.rstrip("\n")
         ais_data = pyAISm.decod_ais(msg)  # Return a dictionnary
 
-        if ais_data['type']:
+        if 'type' in ais_data:
             msg_type = ais_data['type']
             if msg_type in message_types:
                 message_types[msg_type] += 1
             else:
                 message_types[msg_type] = 1
-        ais_format = pyAISm.format_ais(ais_data)  # A more human readable dictionnary
-        print(ais_format)  # Accessing the value of the key
+            ais_format = pyAISm.format_ais(ais_data)  # A more human readable dictionnary
+            if msg_type == 24:
+                print(ais_format)  # Accessing the value of the key
     except pyAISm.UnrecognizedNMEAMessageError as e:
         print(e)
     except pyAISm.BacChecksumError as e:
