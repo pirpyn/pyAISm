@@ -45,9 +45,9 @@ def compute_checksum(msg):
 ##############################################################################
 
 def get_msg_type(msg):
-    # read the ais sentense and return the payload
+    # read the ais sentense and return the message type
     # @param (string) msg : one AIS sentense '!AIVDM,2,1,3,B,55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53,0*3E'
-    # @return (string) : the payload '55P5TL01VIaAL@7WKO@mBplU@<PDhh000000001S;AJ::4A80?4i@E53'
+    # @return (string) : the message type '!AIVDM'
     return msg.split(',')[0]
 
 def get_payload(msg):
@@ -143,6 +143,23 @@ def decod_data(data):
         ais_data['radio']        = int(data[149:168], 2)
         return ais_data
 
+    def decod_4(data):
+        ais_data                 = {'type':int(data[0:6],2)}
+        ais_data['repeat']       = int(data[6:8],2)
+        ais_data['mmsi']         = int(data[8:38],2)
+        ais_data['year']         = int(data[38:52], 2)
+        ais_data['month']        = int(data[52:56], 2)
+        ais_data['day']          = int(data[56:61], 2)
+        ais_data['hour']         = int(data[61:66], 2)
+        ais_data['minute']       = int(data[66:72], 2)
+        ais_data['second']       = int(data[72:78], 2)
+        ais_data['accuracy']     = data[78]
+        ais_data['lon']          = sign_int(data[79:107]) / 600000.0
+        ais_data['lat']          = sign_int(data[107:134]) / 600000.0
+        ais_data['epfd']         = int(data[134:138], 2)
+        ais_data['raim']         = data[148]
+        ais_data['radio']        = int(data[149:168], 2)
+        return ais_data
 
     def decod_5(data):
         ais_data                 = {'type':int(data[0:6],2)}
@@ -209,6 +226,28 @@ def decod_data(data):
         ais_data['assigned']     = data[307]
         return ais_data
 
+    def decod_21(data):
+        ais_data                 = {'type':int(data[0:6],2)}
+        ais_data['repeat']       = int(data[6:8],2)
+        ais_data['mmsi']         = int(data[8:38],2)
+        ais_data['aid_type']     = int(data[38:43],2)
+        ais_data['name']         = decod_str(data[43:163])
+        ais_data['accuracy']     = data[163]
+        ais_data['lon']          = sign_int(data[164:192]) / 600000.0
+        ais_data['lat']          = sign_int(data[192:219]) / 600000.0
+        ais_data['to_bow']       = int(data[219:228], 2)
+        ais_data['to_stern']     = int(data[228:237], 2)
+        ais_data['to_port']      = int(data[237:243], 2)
+        ais_data['to_starboard'] = int(data[243:249], 2)
+        ais_data['epfd']         = int(data[249:253], 2)
+        ais_data['second']       = int(data[253:259], 2)
+        ais_data['off_position'] = data[259]
+        ais_data['regional']     = int(data[260:268], 2)
+        ais_data['raim']         = data[268]
+        ais_data['virtual_aid']  = data[269]
+        ais_data['assigned']     = data[270]
+        ais_data['name_ext']     = decod_str(data[272:361])
+        return ais_data
 
     def decod_24(data):
         ais_data                 = {'type':int(data[0:6],2)}
@@ -237,9 +276,11 @@ def decod_data(data):
                     1  : decod_1,
                     2  : decod_1,
                     3  : decod_1,
+                    4  : decod_4,
                     5  : decod_5,
                     18 : decod_18,
                     19 : decod_19,
+                    21 : decod_21,
                     24 : decod_24
                  }
     try:
@@ -273,13 +314,15 @@ def decod_ais(msg):
     if (compute_checksum(msg) != get_checksum(msg)):
         logger.error('Checksum not valid (' + str(compute_checksum(msg)) + '!=' + str(
             get_checksum(msg)) + '), message is broken/corrupted')
-        raise BacChecksumError()
+        raise BadChecksumError()
 
 
     if s_size != '1' :                          # usefull only if multi-line sentences.
         global globPayload
+        if (globPayload=='' and int(s_count) > 1):
+            return {'none': 'empty'}            # This is not the first message and the main payload is empty
         if s_size != s_count:                   # if this isn't the last messages
-            globPayload = payload + globPayload # append the current payload to the main payload
+            globPayload = globPayload + payload # append the current payload to the main payload
             return {'none':'empty'}
         else:
             payload = globPayload + payload     # append the last payload
@@ -533,6 +576,43 @@ def format_status(status):
     ]
     return status_list[status]
 
+def format_aid_type(aid_type):
+    aid_type_list = [
+        "Default, Type of Aid to Navigation not specified",
+        "Reference point",
+        "RACON (radar transponder marking a navigation hazard)",
+        "Fixed structure off shore, such as oil platforms, wind farms, rigs. (Note: This code should identify an obstruction that is fitted with an Aid-to-Navigation AIS station.)",
+        "Spare, Reserved for future use",
+        "Light, without sectors",
+        "Light, with sectors",
+        "Leading Light Front",
+        "Leading Light Rear",
+        "Beacon, Cardinal N",
+        "Beacon, Cardinal E",
+        "Beacon, Cardinal S",
+        "Beacon, Cardinal W",
+        "Beacon, Port hand",
+        "Beacon, Starboard hand",
+        "Beacon, Preferred Channel port hand",
+        "Beacon, Preferred Channel starboard hand",
+        "Beacon, Isolated danger",
+        "Beacon, Safe water",
+        "Beacon, Special mark",
+        "Cardinal Mark N",
+        "Cardinal Mark E",
+        "Cardinal Mark S",
+        "Cardinal Mark W",
+        "Port hand Mark",
+        "Starboard hand Mark",
+        "Preferred Channel Port hand",
+        "Preferred Channel Starboard hand",
+        "Isolated danger",
+        "Safe Water",
+        "Special Mark",
+        "Light Vessel / LANBY / Rigs",
+    ]
+    return aid_type_list[aid_type]
+
 format_list = {#list of all the key that can be formatted
               'lat'      : format_lat,
               'lon'      : format_lon,
@@ -554,7 +634,8 @@ format_list = {#list of all the key that can be formatted
               'hour'     : format_hour,
               'minute'   : format_minute,
               'turn'     : format_turn,
-              'status'   : format_status
+              'status'   : format_status,
+              'aid_type' : format_aid_type
               }
 
 def format_ais(ais_base):
@@ -578,7 +659,7 @@ def format_ais(ais_base):
 
 class UnrecognizedNMEAMessageError(Exception):
     pass
-class BacChecksumError(Exception):
+class BadChecksumError(Exception):
     pass
 
 
